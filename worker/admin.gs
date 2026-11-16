@@ -234,3 +234,20 @@ function installWorkerTriggers() {
 }
 
 function removeWorkerTriggers() { ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); }); }
+
+/**
+ * יום המעבר: מחבר את 'יומן שירות ספא', מפעיל מיילים / יומנים אישיים / וואטסאפ / גיבוי לגיליון, ומתקין את הטריגרים.
+ * להריץ אחרי migrateAll האחרון ואחרי שהמערכת הישנה נסגרה.
+ */
+function goLive() {
+  var cal = CalendarApp.getCalendarsByName('יומן שירות ספא')[0];
+  if (!cal) throw new Error('לא נמצא יומן בשם יומן שירות ספא');
+  var p = PropertiesService.getScriptProperties();
+  p.setProperty('GCAL_SHARED_ID', cal.getId());
+  p.setProperty('WORKER_LIVE', 'yes');
+  p.setProperty('MIRROR_ON', 'yes');
+  W.settings = null;
+  var r = installWorkerTriggers();
+  Logger.log('פעיל · ' + JSON.stringify(r));
+  return r;
+}
