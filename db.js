@@ -316,8 +316,9 @@ var ACTIONS_ASYNC = {
 };
 /** מעיר את המנוע ברקע כדי שהיומנים יתעדכנו מיד */
 var _kickT = null;
+var WORKER_URL = 'https://script.google.com/macros/s/AKfycbxHOz998TfgtRqa8lI6zivPZChEtlCs12g_fsuAa1nMpQ-tAAGn8jMNlSuniK66DIL0/exec';
 function kick_() {
-  var url = DB.settings.worker_url;
+  var url = WORKER_URL;
   if (!url) return;
   clearTimeout(_kickT);
   _kickT = setTimeout(function () { try { fetch(url, { method: 'POST', mode: 'no-cors', body: 'k' }).catch(function () {}); } catch (e) {} }, 1500);
