@@ -1,3 +1,5 @@
+var WORKER_EXEC_URL = 'https://script.google.com/macros/s/AKfycbxHOz998TfgtRqa8lI6zivPZChEtlCs12g_fsuAa1nMpQ-tAAGn8jMNlSuniK66DIL0/exec';
+
 /* ===================== הגדרות: מהגיליון ל-Firestore (ומהאפליקציה לגיליון) ===================== */
 
 /** לשוניות הגדרות / התאמה / מחירון בגיליון הן המקור. מה שמנהל שינה באפליקציה (מיילים לסיכום) נכתב קודם לגיליון. */
@@ -17,7 +19,7 @@ function syncConfig_() {
   Object.keys(raw).forEach(function (k) { if (!SECRET_KEYS[k]) pub[k] = String(raw[k]); });
   pub.wa_ok = raw.wa_endpoint && raw.wa_key ? 'כן' : 'לא';
   pub.sheet_url = ss_().getUrl();
-  pub.worker_url = ScriptApp.getService().getUrl() || '';
+  pub.worker_url = WORKER_EXEC_URL;   // כתובת הפריסה הקבועה (getService מחזיר בטריגר כתובת אחרת)
   var match = sheetRows_('match').map(function (m) { return { userId: m.userId, product: m.product, callType: m.callType, level: m.level }; });
   var prices = sheetRows_('prices').map(function (m) { return { userId: m.userId, product: m.product, callType: m.callType, price: String(m.price) }; });
   var h = hash_(JSON.stringify([pub, match, prices]));
