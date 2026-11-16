@@ -1,0 +1,102 @@
+rules_version = '2';
+
+// MTI שירות – כללי אבטחה.
+// מי שנכנס מזוהה לפי המייל שלו: המסמך access/<email> אומר מי הוא ומה התפקיד שלו.
+// ה-worker של Apps Script ניגש עם הרשאות הבעלים ולא עובר דרך הכללים האלה.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function accPath() { return /databases/$(database)/documents/access/$(request.auth.token.email.lower()); }
+    function acc() { return get(accPath()).data; }
+    function active() { return signedIn() && exists(accPath()) && acc().active != 'לא'; }
+    function role() { return acc().role; }
+    function myId() { return acc().uid; }
+    function staff() { return active() && role() in ['admin', 'manager', 'office']; }
+    function office() { return active() && role() in ['admin', 'manager', 'office', 'billing']; }
+    function admin() { return active() && role() == 'admin'; }
+    function tech() { return active() && role() == 'tech'; }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    // כל אחד קורא את מסמך הגישה של עצמו; רק מנהל משנה
+    match /access/{email} {
+      allow read: if signedIn() && (email == request.auth.token.email.lower() || admin());
+      allow write: if admin();
+    }
+
+    match /users/{uid} {
+      allow read: if active();
+      allow write: if admin();
+      // כל משתמש מעדכן את "כניסה אחרונה" של עצמו
+      allow update: if active() && uid == myId() && changed().hasOnly(['lastSeen', '_ts']);
+    }
+
+    match /config/settings {
+      allow read: if active();
+      allow write: if admin();
+    }
+    match /config/{name} {
+      allow read: if staff();
+      allow write: if admin();
+    }
+
+    // מונה מספרי קריאות: רק קידום באחד
+    match /meta/counter {
+      allow read: if staff();
+      allow create: if staff();
+      allow update: if staff() && request.resource.data.next == resource.data.next + 1;
+    }
+    match /meta/{name} {
+      allow read: if office();
+    }
+
+    match /customers/{id} {
+      allow read: if office();
+      allow write: if staff();
+    }
+
+    // טכנאי: רק קריאות שמשובצות אליו, ורק שדות של דיווח / סטטוס / תיאום
+    function techCallFields() {
+      return changed().hasOnly(['status', 'closedAt', 'updatedAt', '_ts', 'date', 'time', 'endTime',
+        'assignedUser', 'suggestedUser', 'suggestedDate', 'suggestReason']);
+    }
+    match /calls/{id} {
+      allow read: if office() || (tech() && resource.data.assignedUser == myId());
+      allow create, delete: if staff();
+      allow update: if staff()
+        || (tech() && resource.data.assignedUser == myId() && techCallFields()
+            && request.resource.data.assignedUser in [myId(), '']);
+    }
+
+    function billingFields() {
+      return changed().hasOnly(['invoiceAt', 'invoiceBy', 'cashAt', 'cashBy', 'receiptAt', 'receiptBy', '_ts']);
+    }
+    match /visits/{id} {
+      allow read: if office() || (tech() && resource.data.userId == myId());
+      allow create: if staff() || (tech() && request.resource.data.userId == myId());
+      allow update: if staff() || (active() && role() == 'billing' && billingFields());
+    }
+
+    match /log/{id} {
+      allow read: if staff();
+      allow create: if active() && request.resource.data.userId == myId();
+    }
+
+    match /files/{id} {
+      allow read: if office() || (tech() && (resource.data.userId == myId() || resource.data.assignedUser == myId()));
+      allow create: if active() && request.resource.data.userId == myId();
+    }
+
+    match /alerts/{id} {
+      allow read: if admin();
+    }
+
+    match /oldcal/{month} {
+      allow read: if office();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
