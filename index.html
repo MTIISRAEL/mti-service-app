@@ -219,8 +219,8 @@ select.cal-sel{width:auto;min-height:36px;padding:6px 10px;border-radius:999px}
 <body>
 <div id="app"><div class="empty" style="margin-top:30vh"><span class="spin"></span></div></div>
 <script src="firebase-config.js"></script>
-<script src="core.js?v=2"></script>
-<script src="db.js?v=2"></script>
+<script src="core.js?v=3"></script>
+<script src="db.js?v=3"></script>
 <script>
 /* ========= core ========= */
 var S = { token: null, me: null, init: null, tab: null, cache: {} };
@@ -1099,6 +1099,7 @@ function viewNew(m) {
     '<div id="n-pickbox" style="display:none"><label class="f">מה לאסוף מהמפעל</label><input id="n-pickn" type="text" placeholder="למשל: הזמנה 270977, מדרגות שחורות"></div>' +
     '<div id="n-simplebox" style="display:none"><label class="f">תקלה פשוטה?</label>' + seg('n-simple', ['לא', 'כן'], 'לא') + '</div>' +
     '<label class="f">באחריות?</label>' + seg('n-war', ['כן', 'לא'], '') +
+    '<div id="n-vpricebox" style="display:none"><label class="f">מחיר ביקור ללקוח (₪, כולל מע"מ, בלי חלקים)</label><input id="n-vprice" type="number" inputmode="decimal" placeholder="מה סוכם עם הלקוח"><div class="small muted" style="margin-top:4px">הטכנאי יראה כמה לגבות. חלקים נגבים בנוסף.</div></div>' +
     '<div id="n-urgbox"><label class="f">דחוף?</label>' + seg('n-urg', ['לא', 'כן'], 'לא') +
     '<div id="n-urgr" style="display:none"><label class="f">למה דחוף? (נשלח לקובי)</label><input id="n-urgreason" type="text"></div></div>' +
     '<div id="n-bizurg" class="small muted" style="display:none;margin-top:8px">לקוח עסקי: הקריאה דחופה אוטומטית.</div>' +
@@ -1113,6 +1114,7 @@ function viewNew(m) {
     $('#n-urgr').style.display = st.urgent === 'כן' ? '' : 'none';
     $('#n-partbox').style.display = 'none';   // הוסר: שליחת חלק בלי ביקור – פותחים משימה במקום
     $('#n-pickbox').style.display = st.pickup === 'כן' ? '' : 'none';
+    $('#n-vpricebox').style.display = st.warranty === 'לא' ? '' : 'none';
     $('#n-simplebox').style.display = st.callType === 'תקלה' && st.partShipped !== 'כן' && st.product === 'ספא' ? '' : 'none';
     preview();
   };
@@ -1160,7 +1162,7 @@ function viewNew(m) {
   };
   $('#n-save').onclick = function () {
     var b = this;
-    var p = { product: st.product, callType: st.callType, warranty: st.warranty, simple: st.simple, urgent: st.urgent, urgentReason: $('#n-urgreason').value, partShipped: st.partShipped, pickup: st.pickup || 'לא', pickupNote: $('#n-pickn').value, description: $('#n-desc').value,
+    var p = { product: st.product, callType: st.callType, warranty: st.warranty, simple: st.simple, urgent: st.urgent, urgentReason: $('#n-urgreason').value, partShipped: st.partShipped, pickup: st.pickup || 'לא', pickupNote: $('#n-pickn').value, description: $('#n-desc').value, visitPrice: st.warranty === 'לא' ? $('#n-vprice').value : '',
       customer: { id: st.customer.id, type: st.customer.type, name: $('#n-name').value.trim(), phone: $('#n-phone').value.trim(), address: $('#n-address').value.trim(), city: $('#n-city').value.trim(), region: $('#n-region').value } };
     if (!p.customer.region && p.partShipped !== 'כן') return toast('יש לבחור אזור. בלי אזור אי אפשר להציע מתקין נכון.', true);
     busy(b, true);
@@ -1317,6 +1319,7 @@ function renderCall(sh, c, reload) {
     (c.urgent === 'כן' && c.urgentReason ? '<span class="k">דחיפות</span><span>' + h(c.urgentReason) + '</span>' : '') +
     (c.assignedName ? '<span class="k">משובץ</span><span>' + h(c.assignedName) + '</span>' : '') +
     (c.date ? '<span class="k">מועד</span><span>' + h(dayLabel(c.date)) + (c.time ? ' · ' + h(c.time) + (c.endTime ? ' עד ' + h(c.endTime) : '') : '') + '</span>' : '') +
+    (c.warranty === 'לא' && c.visitPrice ? '<span class="k">לגבות</span><span><b>' + money(c.visitPrice) + '</b> לביקור, כולל מע"מ. חלקים בנוסף.</span>' : '') +
     (c.agreedPrice !== undefined && c.agreedPrice !== '' ? '<span class="k">מחיר שסוכם</span><span>' + money(c.agreedPrice) + '</span>' : '') + '</div>' +
     (c.description ? '<hr class="s"><div style="white-space:pre-wrap">' + h(c.description) + '</div>' : '') +
     (c.notes ? '<hr class="s"><div class="small muted" style="white-space:pre-wrap">הערות: ' + h(c.notes) + '</div>' : '') + '</div>';
@@ -1372,6 +1375,7 @@ function renderCall(sh, c, reload) {
       '<div class="row"><div class="grow"><label class="f">באחריות</label><select id="e-war"><option' + (c.warranty === 'כן' ? ' selected' : '') + '>כן</option><option' + (c.warranty === 'לא' ? ' selected' : '') + '>לא</option></select></div>' +
       '<div class="grow"><label class="f">תקלה פשוטה</label><select id="e-simple"><option' + (c.simple !== 'כן' ? ' selected' : '') + '>לא</option><option' + (c.simple === 'כן' ? ' selected' : '') + '>כן</option></select></div>' +
       '<div class="grow"><label class="f">דחוף</label><select id="e-urg"' + (c.customerType === 'עסק' ? ' disabled' : '') + '><option' + (c.urgent !== 'כן' ? ' selected' : '') + '>לא</option><option' + (c.urgent === 'כן' ? ' selected' : '') + '>כן</option></select></div></div>' +
+      '<div id="e-vpricebox"><label class="f">מחיר ביקור ללקוח (₪, כולל מע"מ, בלי חלקים)</label><input id="e-vprice" type="number" inputmode="decimal" value="' + h(c.visitPrice || '') + '"></div>' +
       '<div id="e-urgbox" style="display:none"><label class="f">למה דחוף? (נשלח לקובי)</label><input id="e-urgr" type="text" value="' + h(c.urgentReason || '') + '"></div>' +
       '<div class="row"><div style="width:130px"><label class="f">איסוף מהמפעל</label><select id="e-pick"><option value="">לא</option><option value="כן"' + (c.pickup === 'כן' ? ' selected' : '') + '>כן</option></select></div><div class="grow"><label class="f">מה לאסוף</label><input id="e-pickn" type="text" value="' + h(c.pickupNote || '') + '"></div></div>' +
       '<label class="f">הערות פנימיות</label><textarea id="e-notes" style="min-height:60px">' + h(c.notes) + '</textarea>' +
@@ -1437,6 +1441,8 @@ function renderCall(sh, c, reload) {
   if (eu) {
     var uu = function () { $('#e-urgbox').style.display = eu.value === 'כן' && c.customerType !== 'עסק' ? '' : 'none'; };
     eu.onchange = uu; uu();
+    var ew = $('#e-war', sh.body), uw = function () { $('#e-vpricebox').style.display = ew.value === 'לא' ? '' : 'none'; };
+    ew.onchange = uw; uw();
     $$('#e-prod button', sh.body).forEach(function (bt) { bt.onclick = function () { bt.classList.toggle('on'); }; });
     $('#e-save', sh.body).onclick = function () {
       var b = this;
@@ -1445,7 +1451,7 @@ function renderCall(sh, c, reload) {
       busy(b, true);
       api('updateCallInfo', { id: c.id, product: prod, callType: $('#e-type').value,
         customer: { name: $('#e-cname').value, phone: $('#e-cphone').value, address: $('#e-caddr').value, city: $('#e-ccity').value, region: $('#e-creg').value, type: $('#e-ctype').value },
-        description: $('#e-desc').value, warranty: $('#e-war').value, simple: $('#e-simple').value, urgent: eu.value, urgentReason: $('#e-urgr').value, notes: $('#e-notes').value, pickup: $('#e-pick').value, pickupNote: $('#e-pickn').value })
+        description: $('#e-desc').value, warranty: $('#e-war').value, simple: $('#e-simple').value, urgent: eu.value, urgentReason: $('#e-urgr').value, notes: $('#e-notes').value, pickup: $('#e-pick').value, pickupNote: $('#e-pickn').value, visitPrice: $('#e-war').value === 'לא' ? $('#e-vprice').value : '' })
         .then(function () { toast('נשמר'); reload(); }).catch(function (e) { busy(b, false); fail(e); });
     };
   }
@@ -1508,7 +1514,7 @@ function openReport(c, selfCoord, done) {
   if (!selfCoord) html += '<label class="f">חלקים שהשתמשת בהם</label><input id="r-parts" type="text" placeholder="למשל: משאבה 2HP, חיישן טמפרטורה">';
   html += '<label class="f">תמונות</label><div class="thumbs" id="r-thumbs"></div><label class="btn block" style="margin-top:6px">📷 צילום / הוספת תמונות<input id="r-file" type="file" accept="image/*" multiple style="display:none"></label>';
   if (!selfCoord) html += '<label class="f">חתימת לקוח</label><canvas class="sig" id="r-sig"></canvas><div class="row" style="margin-top:6px"><button class="btn sm" id="r-sigclr">ניקוי חתימה</button></div>';
-  if (internal && !selfCoord) html += '<label class="f">תשלום מהלקוח</label>' + segH('r-pay', S.init.payMethods).replace('class="seg"', 'class="seg wide"') + '<div id="r-amtbox" style="display:none"><label class="f">כמה נגבה (₪)</label><input id="r-amt" type="number" inputmode="decimal"></div>';
+  if (internal && !selfCoord) html += '<label class="f">תשלום מהלקוח</label>' + segH('r-pay', S.init.payMethods).replace('class="seg"', 'class="seg wide"') + '<div id="r-amtbox" style="display:none"><label class="f">כמה נגבה (₪)</label><input id="r-amt" type="number" inputmode="decimal">' + (c.warranty === 'לא' && c.visitPrice ? '<div class="small muted" style="margin-top:4px">סוכם עם הלקוח: ' + money(c.visitPrice) + ' לביקור (כולל מע"מ) + חלקים</div>' : '') + '</div>';
   html += '<div style="height:16px"></div><button class="btn ok block" id="r-send">שליחת דיווח</button>';
   sh.body.innerHTML = html;
   var bindSeg = function (id, cb) { $$('#' + id + ' button', sh.body).forEach(function (b) { b.onclick = function () { $$('#' + id + ' button', sh.body).forEach(function (x) { x.classList.remove('on'); }); b.classList.add('on'); cb(b.dataset.v); }; }); };

@@ -42,7 +42,8 @@ var SCHEMA = {
     ['updatedAt', 'עודכנה'], ['closedAt', 'נסגרה'], ['notes', 'הערות'], ['endTime', 'שעת סיום'], ['calEventId', 'אירוע ביומן'], ['calOwner', 'יומן של'],
     ['place', 'מקום (משימה)'], ['contactPhone', 'טלפון איש קשר (משימה)'], ['expectAmount', 'סכום לאיסוף (משימה)'],
     ['pickup', 'איסוף מהמפעל'], ['pickupNote', 'מה לאסוף מהמפעל'],
-    ['gEventId', 'אירוע ביומן שירות ספא'], ['gSeen', 'מועד אחרון ביומן גוגל'], ['gText', 'תוכן אחרון ביומן גוגל'], ['gAdopted', 'אירוע מקורי מהיומן']] },
+    ['gEventId', 'אירוע ביומן שירות ספא'], ['gSeen', 'מועד אחרון ביומן גוגל'], ['gText', 'תוכן אחרון ביומן גוגל'], ['gAdopted', 'אירוע מקורי מהיומן'],
+    ['visitPrice', 'מחיר ביקור ללקוח (כולל מע"מ, בלי חלקים)']] },
   visits: { tab: 'ביקורים', cols: [
     ['id', 'מזהה'], ['callId', 'קריאה'], ['userId', 'איש צוות'], ['at', 'מועד דיווח'], ['outcome', 'תוצאה'],
     ['work', 'מה בוצע'], ['parts', 'חלקים'], ['photos', 'תמונות'], ['signature', 'חתימה'],
@@ -431,6 +432,7 @@ ACTIONS.createCall = function (me, p) {
   if (!p.customer || !String(p.customer.name || '').trim() || !String(p.customer.phone || '').trim()) throw new Error('חסר שם או טלפון של הלקוח');
   if (p.warranty !== 'כן' && p.warranty !== 'לא') throw new Error('יש לסמן אם המוצר באחריות');
   if (p.urgent === 'כן' && p.customer.type !== 'עסק' && !String(p.urgentReason || '').trim()) throw new Error('יש לכתוב למה הקריאה דחופה');
+  var vprice = p.warranty === 'לא' ? priceStr_(p.visitPrice) : '';
   return withLock_(function () {
     var id = nextCallId_();   // לפני כל כתיבה: בדפדפן זה שומר מספר מהשרת ומריץ שוב
     var cu = p.customer, custId = cu.id;
@@ -448,7 +450,8 @@ ACTIONS.createCall = function (me, p) {
       customerType: custType, region: cu.region || '', urgent: (custType === 'עסק' || p.urgent === 'כן') ? 'כן' : 'לא',
       urgentReason: custType === 'עסק' ? 'לקוח עסקי' : (p.urgentReason || ''), warranty: p.warranty,
       simple: p.simple === 'כן' ? 'כן' : 'לא', description: p.description || '', status: 'נפתחה', updatedAt: now_(), notes: '',
-      pickup: p.pickup === 'כן' ? 'כן' : '', pickupNote: p.pickup === 'כן' ? String(p.pickupNote || '').trim() : ''
+      pickup: p.pickup === 'כן' ? 'כן' : '', pickupNote: p.pickup === 'כן' ? String(p.pickupNote || '').trim() : '',
+      visitPrice: vprice
     };
     if (p.partShipped === 'כן') {
       call.status = 'חלק נשלח ללקוח';
@@ -521,13 +524,22 @@ ACTIONS.taskDone = function (me, p) {
   });
 };
 
+/** מחיר שהוקלד ('350', '350 ש"ח') → '350'. ריק = אין מחיר */
+function priceStr_(v) {
+  var t = String(v === undefined || v === null ? '' : v).replace(/[^\d.]/g, '');
+  if (!t) return '';
+  if (!(Number(t) > 0)) throw new Error('מחיר ביקור לא תקין');
+  return String(Number(t));
+}
+
 function fmtMin_(m) { var hh = Math.floor(m / 60), mm = m % 60; return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm; }
 
 ACTIONS.updateCallInfo = function (me, p) {
   need_(isStaff_(me));
   return withLock_(function () {
     var c = getCall_(p.id), patch = {}, changes = [];
-    ['description', 'warranty', 'simple', 'notes', 'agreedPrice', 'place', 'contactPhone', 'expectAmount', 'pickup', 'pickupNote'].forEach(function (k) {
+    if (p.hasOwnProperty('visitPrice')) p.visitPrice = priceStr_(p.visitPrice);
+    ['description', 'warranty', 'simple', 'notes', 'agreedPrice', 'place', 'contactPhone', 'expectAmount', 'pickup', 'pickupNote', 'visitPrice'].forEach(function (k) {
       if (p.hasOwnProperty(k) && String(p[k]) !== String(c[k])) { patch[k] = p[k]; changes.push(k); }
     });
     // מוצר / סוג קריאה (רחלי טעתה בפתיחה)
@@ -574,7 +586,7 @@ ACTIONS.updateCallInfo = function (me, p) {
       var c2 = getCall_(c.id), sug = suggest_(c2, ctx_());
       update_('calls', c2._row, { suggestedUser: sug ? sug.userId : '', suggestedDate: sug ? sug.date : '', suggestReason: sug ? sug.reason : 'אין איש צוות מתאים' });
     }
-    log_(me.id, c.id, 'עודכנו פרטים', changes.map(function (k) { return ({ product: 'מוצר', callType: 'סוג קריאה', customer: 'פרטי לקוח', description: 'תיאור', warranty: 'אחריות', simple: 'תקלה פשוטה', notes: 'הערות', agreedPrice: 'מחיר שסוכם', urgent: 'דחיפות', place: 'מקום', contactPhone: 'טלפון', expectAmount: 'סכום לאיסוף', pickup: 'איסוף מהמפעל', pickupNote: 'מה לאסוף' })[k]; }).join(', '));
+    log_(me.id, c.id, 'עודכנו פרטים', changes.map(function (k) { return ({ product: 'מוצר', callType: 'סוג קריאה', customer: 'פרטי לקוח', description: 'תיאור', warranty: 'אחריות', simple: 'תקלה פשוטה', notes: 'הערות', agreedPrice: 'מחיר שסוכם', urgent: 'דחיפות', place: 'מקום', contactPhone: 'טלפון', expectAmount: 'סכום לאיסוף', pickup: 'איסוף מהמפעל', pickupNote: 'מה לאסוף', visitPrice: 'מחיר ביקור ללקוח' })[k]; }).join(', '));
     return { ok: true };
   });
 };
@@ -919,6 +931,7 @@ function callEventText_(c) {
     addr ? 'ניווט: https://waze.com/ul?q=' + encodeURIComponent(addr) + '&navigate=yes' : '',
     'מוצר: ' + c.product + ' · ' + c.callType + ' · ' + (c.warranty === 'כן' ? 'באחריות' : 'לא באחריות'),
     c.pickup === 'כן' ? 'לאסוף מהמפעל: ' + (c.pickupNote || 'כן') : '',
+    c.warranty === 'לא' && c.visitPrice ? 'לגבות מהלקוח: ' + money_(c.visitPrice) + ' לביקור (כולל מע"מ) + חלקים' : '',
     c.description ? 'תיאור: ' + c.description : '',
     'סטטוס: ' + c.status
   ].filter(String);

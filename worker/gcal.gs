@@ -254,8 +254,30 @@ function gcalPull_() {
   return st;
 }
 
-/** טריגר: כל שינוי ביומן + כל 5 דקות + "דחיפה" מהאפליקציה אחרי שמירה */
+/**
+ * טריגר: כל שינוי ביומן + כל 5 דקות + "דחיפה" מהאפליקציה אחרי שמירה.
+ * רק ריצה אחת בכל רגע. מי שמגיע כשמישהו כבר רץ משאיר דגל, והריצה הפעילה עושה סבב נוסף –
+ * כך שינוי לא נתקע עד הטריגר הבא.
+ */
 function gcalTick() {
+  var cache = CacheService.getScriptCache();
+  cache.put('tick_again', '1', 600);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(500)) return { queued: true };
+  W.locked = true;
+  var r = null, n = 0;
+  try {
+    while (cache.get('tick_again') && n++ < 6) { cache.remove('tick_again'); resetCache_(); r = tickOnce_(); }
+  } finally { W.locked = false; lock.releaseLock(); }
+  // דגל שהגיע בדיוק ברגע השחרור – עוד סבב
+  if (cache.get('tick_again') && lock.tryLock(500)) {
+    W.locked = true;
+    try { cache.remove('tick_again'); resetCache_(); r = tickOnce_(); } finally { W.locked = false; lock.releaseLock(); }
+  }
+  return r;
+}
+
+function tickOnce_() {
   var n = 0, r = null, cfg = null;
   try { cfg = syncConfig_(); } catch (e) { Logger.log('הגדרות: ' + e); }
   try { n = processChanged_(); } catch (e) { Logger.log('שינויים: ' + e); }

@@ -1,7 +1,7 @@
 import asyncio, os, json
 from playwright.async_api import async_playwright
-H='file:///home/claude/mti-web/test.html'
-SEED=json.load(open('/home/claude/mti-web/test/seed.json'))
+H='file:///home/claude/mti-service-app/test.html'
+SEED=json.load(open('/home/claude/mti-service-app/test/seed.json'))
 async def main():
   async with async_playwright() as p:
     b=await p.chromium.launch()
@@ -20,7 +20,7 @@ async def main():
     await pg.click('nav [data-tab=new]'); await pg.wait_for_selector('#n-phone')
     await pg.fill('#n-phone','0521234567'); await pg.fill('#n-name','משפחת כהן'); await pg.fill('#n-address','הרצל 12'); await pg.fill('#n-city','נתניה')
     await pg.select_option('#n-region','שרון')
-    await pg.click('#n-product [data-v="ספא"]'); await pg.click('#n-product [data-v="בריכת זרמים"]'); await pg.click('#n-type [data-v="התקנה"]'); await pg.click('#n-war [data-v="כן"]')
+    await pg.click('#n-product [data-v="ספא"]'); await pg.click('#n-product [data-v="בריכת זרמים"]'); await pg.click('#n-type [data-v="התקנה"]'); await pg.click('#n-war [data-v="לא"]'); await pg.fill('#n-vprice','450')
     await pg.fill('#n-desc','התקנת ספא ובריכה')
     await pg.wait_for_timeout(500); await pg.screenshot(path='shots/03-new.png',full_page=True)
     await pg.click('#n-save'); await pg.wait_for_timeout(1500); print('ERRS so far', errs, await pg.evaluate("(document.querySelector('.toast')||{}).textContent")); await pg.screenshot(path='shots/03b.png'); await pg.wait_for_selector('.sheet #c-assign'); await pg.wait_for_timeout(300)
@@ -33,6 +33,7 @@ async def main():
     print('after assign sheets open:', await pg.evaluate("document.querySelectorAll('.sheet').length"))
     st=await pg.evaluate("(()=>{var o={};Object.keys(__store).filter(k=>/^calls\\//.test(k)).forEach(k=>o[k]=[__store[k].status,__store[k].assignedUser,__store[k].date,__store[k].time,__store[k].product,__store[k].cust&&__store[k].cust.name]);return o})()")
     print('calls:', st)
+    print('vprice:', await pg.evaluate("__store['calls/1100'].visitPrice"), await pg.evaluate("__store['calls/1100'].warranty"))
     print('counter:', await pg.evaluate("__store['meta/counter']"))
     # task self pickup
     await pg.click('nav [data-tab=week]'); await pg.wait_for_timeout(600); await pg.screenshot(path='shots/05-week.png')
@@ -47,14 +48,14 @@ async def main():
     # tech
     await as_user('j@t.co')
     await pg.screenshot(path='shots/07-tech-today.png')
-    await pg.click('#d-next'); await pg.wait_for_timeout(200); await pg.click('#d-next'); await pg.wait_for_selector('[data-call]'); await pg.click('[data-call]'); await pg.wait_for_selector('#t-report')
+    await pg.evaluate("openCall('1100')"); await pg.wait_for_selector('#t-report')
     await pg.click('#t-report'); await pg.wait_for_selector('#r-out')
     await pg.click('#r-out [data-v="הושלם"]'); await pg.fill('#r-work','הותקן'); 
     box=await pg.query_selector('#r-sig'); bb=await box.bounding_box()
     await pg.mouse.move(bb['x']+40,bb['y']+100); await pg.mouse.down()
     for i in range(12): await pg.mouse.move(bb['x']+40+i*22,bb['y']+100+((-1)**i)*30)
     await pg.mouse.up()
-    await pg.click('#r-pay [data-v="מזומן"]'); await pg.fill('#r-amt','350')
+    await pg.click('#r-pay [data-v="מזומן"]'); print('hint:', await pg.evaluate("(document.querySelector('#r-amtbox .muted')||{}).textContent")); await pg.fill('#r-amt','350')
     await pg.click('#r-send'); await pg.wait_for_timeout(700)
     print('after report:', await pg.evaluate("(()=>{var c=__store['calls/1100'];var v=Object.keys(__store).filter(k=>/^visits\\//.test(k)).map(k=>__store[k]);var f=Object.keys(__store).filter(k=>/^files\\//.test(k));return [c.status, v.length, v[0]&&v[0].amount, v[0]&&v[0].signature, f.length]})()"))
     await pg.screenshot(path='shots/08b-after-report.png'); print('sheets', await pg.evaluate("document.querySelectorAll('.sheet').length"), errs)

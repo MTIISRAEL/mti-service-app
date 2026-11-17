@@ -205,10 +205,13 @@ function setSetting_(key, value) {
   W.sheet.settings = null; W.settings = null;
 }
 
+/** נעילה אחת לכל הסקריפט. אם הריצה הזו כבר מחזיקה אותה (סבב סנכרון) – פשוט ממשיכים */
 function withLock_(fn) {
+  if (W.locked) return fn();
   var lock = LockService.getScriptLock();
   lock.waitLock(25000);
-  try { return fn(); } finally { lock.releaseLock(); }
+  W.locked = true;
+  try { return fn(); } finally { W.locked = false; lock.releaseLock(); }
 }
 function now_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm'); }
 function today_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }

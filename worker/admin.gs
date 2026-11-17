@@ -196,16 +196,8 @@ function mirrorToSheet() {
 
 /** האפליקציה שולחת POST אחרי כל שמירה, כדי שהיומנים יתעדכנו מיד (ולא רק כל 5 דקות) */
 function doPost(e) {
-  var cache = CacheService.getScriptCache();
-  if (cache.get('kick')) { cache.put('kick_again', '1', 120); return ContentService.createTextOutput('later'); }
-  cache.put('kick', '1', 15);
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(1000)) { cache.put('kick_again', '1', 120); return ContentService.createTextOutput('busy'); }
-  try {
-    do { cache.remove('kick_again'); gcalTick(); } while (cache.get('kick_again'));
-  } catch (x) { Logger.log('kick: ' + x); }
-  finally { lock.releaseLock(); }
-  return ContentService.createTextOutput('ok');
+  try { var r = gcalTick(); return ContentService.createTextOutput(r && r.queued ? 'queued' : 'ok'); }
+  catch (x) { Logger.log('kick: ' + x); return ContentService.createTextOutput('err'); }
 }
 function doGet() { return ContentService.createTextOutput('MTI שירות – מנוע ברקע'); }
 

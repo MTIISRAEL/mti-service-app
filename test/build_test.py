@@ -1,5 +1,5 @@
 import re, json, os
-root='/home/claude/mti-web'
+root='/home/claude/mti-service-app'
 s=open(root+'/index.html',encoding='utf-8').read()
 s=re.sub(r'<script type="module">.*?</script>', '<script src="test/mockfb.js"></script><script>start();</script>', s, flags=re.S)
 s=s.replace('<link rel="manifest" href="manifest.json">','')

@@ -71,7 +71,7 @@ const W=Object.assign({},G,{UrlFetchApp,
   Logger:{log:m=>console.log('   log:',m)}});
 Object.assign(W.Utilities,{sleep(){}});
 vm.createContext(W);
-['/home/claude/mti-web/core.js','/home/claude/mti-web/worker/worker.gs','/home/claude/mti-web/worker/gcal.gs','/home/claude/mti-web/worker/admin.gs'].forEach(f=>vm.runInContext(fs.readFileSync(f,'utf8'),W,{filename:f}));
+['/home/claude/mti-service-app/core.js','/home/claude/mti-service-app/worker/worker.gs','/home/claude/mti-service-app/worker/gcal.gs','/home/claude/mti-service-app/worker/admin.gs'].forEach(f=>vm.runInContext(fs.readFileSync(f,'utf8'),W,{filename:f}));
 
 const m=W.migrateAll();
 ok(m.calls===2&&m.customers===2&&m.users===9,'העברה: '+JSON.stringify(m));
@@ -79,7 +79,7 @@ ok(get('access/mti.kobi@gmail.com')&&get('access/mti.kobi@gmail.com').uid==='kob
 ok(get('calls/'+c1).cust.name==='לוי'&&get('calls/'+c1).archived===false,'פרטי הלקוח בתוך הקריאה');
 ok(get('meta/counter').next===Number(c2)+1,'מונה הקריאות ממשיך');
 ok(get('oldcal/2026-09').events.length===1,'היסטוריית היומן לפי חודש');
-const cs=get('config/settings');ok(cs&&!('wa_key'in cs)&&cs.wa_ok==='לא'&&cs.worker_url==='https://worker','הגדרות בלי סודות');
+const cs=get('config/settings');ok(cs&&!('wa_key'in cs)&&cs.wa_ok==='לא'&&/AKfycbxHOz/.test(cs.worker_url),'הגדרות בלי סודות');
 ok(get('config/match').rows.length>5,'טבלת התאמה');
 
 // התקנה: מתחיל מהמצב הנוכחי
@@ -118,4 +118,9 @@ W.Calendar.Events.list=(id,args)=>args.syncToken?{items:[{id:e2.split('@')[0],iC
 t=W.gcalTick(); ok(t.pull.pulled===1&&get('calls/'+c2).date==='2026-11-02'&&get('calls/'+c2).time==='08:00','משיכה מהירה מגוגל: '+JSON.stringify(t.pull));
 W.Calendar.Events.list=(id,args)=>args.syncToken?{items:[{id:e2.split('@')[0],iCalUID:e2,status:'cancelled'}],nextSyncToken:'t3'}:{items:[],nextSyncToken:'t1'};
 t=W.gcalTick(); ok(t.pull.removed===1&&get('calls/'+c2).date===''&&get('calls/'+c2).status==='לתיאום מחדש','מחיקה ביומן ← חוזר לתיאום');
+// דחיפה בזמן שריצה אחרת מחזיקה את הנעילה: לא הולכת לאיבוד
+let held=true; W.LockService={getScriptLock:()=>({tryLock:()=>!held,waitLock(){},releaseLock(){}})};
+appWrite('calls/'+c1,{assignedUser:'jaber',date:'2026-11-20',time:'',status:'שובצה'});
+let q=W.gcalTick(); ok(q&&q.queued,'דחיפה בזמן ריצה אחרת נרשמה בתור');
+held=false; q=W.gcalTick(); ok(q&&q.changed>=1&&get('calls/'+c1).gSeen==='D2026-11-20','הסבב הבא עיבד את מה שחיכה');
 console.log(fails?'נכשלו '+fails:'הכל עבר');
