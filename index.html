@@ -219,8 +219,8 @@ select.cal-sel{width:auto;min-height:36px;padding:6px 10px;border-radius:999px}
 <body>
 <div id="app"><div class="empty" style="margin-top:30vh"><span class="spin"></span></div></div>
 <script src="firebase-config.js"></script>
-<script src="core.js?v=3"></script>
-<script src="db.js?v=3"></script>
+<script src="core.js?v=4"></script>
+<script src="db.js?v=4"></script>
 <script>
 /* ========= core ========= */
 var S = { token: null, me: null, init: null, tab: null, cache: {} };
@@ -1665,25 +1665,44 @@ function viewAdmin(m) {
 }
 
 /* ========= boot ========= */
+/* קריאת מסמך הגישה – עם ניסיונות חוזרים ורענון ההתחברות (רשת איטית / אסימון שפג) */
+var RETRY_CODES = { 'permission-denied': 1, 'unavailable': 1, 'deadline-exceeded': 1, 'unauthenticated': 1 };
+function fetchAccess_(email, attempt) {
+  attempt = attempt || 0;
+  var tok = attempt && FB.auth.currentUser ? FB.auth.currentUser.getIdToken(true).catch(function () {}) : Promise.resolve();
+  return tok.then(function () { return FB.getDoc(FB.doc(FB.db, 'access/' + email)); }).catch(function (e) {
+    if (attempt < 3 && e && RETRY_CODES[e.code]) return new Promise(function (r) { setTimeout(r, 1500 * (attempt + 1)); }).then(function () { return fetchAccess_(email, attempt + 1); });
+    throw e;
+  });
+}
+function bootWith_(a, email) {
+  S.me = { id: a.uid, role: a.role, kind: a.kind || '', name: '' };
+  return listen_(S.me).then(function () {
+    var u = find_('users', a.uid);
+    if (!u) { renderLogin('המשתמש לא נמצא במערכת'); return; }
+    S.me = publicUser_(u);
+    S.init = ACTIONS.init(u);
+    store.set('mail', email);
+    shell();
+    var today = today_();
+    if (String(u.lastSeen || '').slice(0, 10) !== today) { update_('users', u._row, { lastSeen: now_() }); flushWrites_().catch(function () {}); }
+  });
+}
 function boot(user) {
   var email = String(user.email || '').toLowerCase();
-  FB.getDoc(FB.doc(FB.db, 'access/' + email)).then(function (s) {
+  var cached = null; try { cached = JSON.parse(store.get('acc_' + email) || 'null'); } catch (e) {}
+  var started = false;
+  if (cached && cached.uid) { started = true; bootWith_(cached, email).catch(function (e) { console.error(e); }); }
+  fetchAccess_(email).then(function (s) {
     var a = s.exists() ? s.data() : null;
-    if (!a || a.active === 'לא') { FB.signOut(FB.auth); renderLogin('החשבון ' + email + ' לא רשום במערכת. פנה למאיר.'); return; }
-    S.me = { id: a.uid, role: a.role, kind: a.kind || '', name: '' };
-    return listen_(S.me).then(function () {
-      var u = find_('users', a.uid);
-      if (!u) { renderLogin('המשתמש לא נמצא במערכת'); return; }
-      S.me = publicUser_(u);
-      S.init = ACTIONS.init(u);
-      store.set('mail', email);
-      shell();
-      var today = today_();
-      if (String(u.lastSeen || '').slice(0, 10) !== today) { update_('users', u._row, { lastSeen: now_() }); flushWrites_().catch(function () {}); }
-    });
+    if (!a || a.active === 'לא') { store.del('acc_' + email); stopListen_(); FB.signOut(FB.auth); renderLogin('החשבון ' + email + ' לא רשום במערכת. פנה למאיר.'); return; }
+    store.set('acc_' + email, JSON.stringify({ uid: a.uid, role: a.role, kind: a.kind || '', active: a.active }));
+    if (!started) return bootWith_(a, email);
+    if (cached.uid !== a.uid || cached.role !== a.role) location.reload();
   }).catch(function (e) {
     console.error(e);
-    $('#app').innerHTML = '<div class="banner bad" style="margin:20px">לא הצלחנו לטעון את הנתונים. ' + h(e && e.code === 'permission-denied' ? 'אין הרשאה.' : (e && e.message || '')) + ' <button class="btn sm" onclick="location.reload()">נסה שוב</button></div>';
+    if (started) return;   // ממשיכים עם מה שנשמר בטלפון
+    $('#app').innerHTML = '<div class="banner bad" style="margin:20px">לא הצלחנו להתחבר לשרת. ' + h(e && e.code === 'permission-denied' ? 'בעיית הרשאה – נסו לצאת ולהיכנס מחדש.' : 'בדקו את החיבור לאינטרנט.') + ' <button class="btn sm" onclick="location.reload()">נסה שוב</button> <button class="btn sm" onclick="logout()">יציאה</button></div>';
   });
 }
 function start() {

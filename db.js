@@ -215,6 +215,7 @@ function listen_(me) {
       }, function (err) {
         console.error(name, err);
         if (first) { first = false; res(); }
+        relisten_(err);
       }));
     }));
   };
@@ -231,6 +232,19 @@ function listen_(me) {
     sub('visits', F.query(F.collection(db, 'visits'), F.where('userId', '==', me.id), F.where('archived', '==', false)), function (s, i) { applySnap_('visits', s, i); });
   }
   return Promise.all(waits).then(function () { DB.ready = true; });
+}
+/** האזנה שנפלה (אסימון שפג / רשת): מרעננים את ההתחברות ומאזינים מחדש */
+var _relistenT = null, _relistenN = 0;
+function relisten_(err) {
+  if (!DB.me || _relistenT || _relistenN > 5) return;
+  _relistenN++;
+  _relistenT = setTimeout(function () {
+    _relistenT = null;
+    var me = DB.me;
+    (FB.auth.currentUser ? FB.auth.currentUser.getIdToken(true) : Promise.resolve()).catch(function () {}).then(function () {
+      return listen_(me);
+    }).then(function () { if (typeof refresh === 'function') refresh(); });
+  }, 2000 * _relistenN);
 }
 function stopListen_() { DB.unsub.forEach(function (u) { try { u(); } catch (e) {} }); DB.unsub = []; DB.ready = false; }
 
@@ -285,7 +299,8 @@ var ACTIONS_ASYNC = {
     if (!isStaff_(me)) return Promise.resolve(v);
     var F = window.FB;
     v.log = [];
-    return F.getDocs(F.query(F.collection(F.db, 'log'), F.where('callId', '==', String(p.id)))).then(function (qs) {
+    var timeout = new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 2500); });
+    return Promise.race([F.getDocs(F.query(F.collection(F.db, 'log'), F.where('callId', '==', String(p.id)))), timeout]).then(function (qs) {
       var rows = []; qs.forEach(function (d) { rows.push(d.data()); });
       rows.sort(function (a, b) { return a.at < b.at ? -1 : a.at > b.at ? 1 : 0; });
       v.log = rows.map(function (l) { return { at: l.at, who: userName_(l.userId), action: l.action, details: l.details, reason: l.reason }; });
